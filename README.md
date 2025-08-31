@@ -107,16 +107,16 @@ Open your browser to `http://localhost:8501`
 
 ## 🎨 Categories Supported
 
-| Category | Emoji | Category | Emoji | Category | Emoji |
-|----------|-------|----------|-------|----------|---------|
-| Art | 🎨 | Meme | 😂 | Culture | 🏛️ |
-| Food | 🍛 | Fables | 📚 | Events | 🎉 |
-| Music | 🎵 | People | 👥 | Literature | 📖 |
-| Architecture | 🏗️ | Skills | ⚡ | Images | 📸 |
-| Videos | 🎬 | Flora | 🌸 | Fauna | 🦋 |
-| Education | 🎓 | Vegetation | 🌿 | Folk Talks | 🗣️ |
-| Traditional Skills | 🛠️ | Local History | 📜 | Local Locations | 📍 |
-| Food & Agriculture | 🌾 | Newspapers | 📰 | | |
+| Category  | Category  | Category  |
+|-----------------|-----------------|-------------------|
+| Art  🎨 | Meme  😂 | Culture  🏛️ |
+| Food  🍛 | Fables  📚 | Events  🎉 |
+| Music  🎵 | People  👥 | Literature  📖 |
+| Architecture  🏗️ | Skills  ⚡ | Images  📸 |
+| Videos  🎬 | Flora  🌸 | Fauna  🦋 |
+| Education  🎓 | Vegetation  🌿 | Folk Talks  🗣️ |
+| Traditional Skills  🛠️ | Local History  📜 | Local Locations  📍 |
+| Food & Agriculture  🌾 | Newspapers  📰 | | |
 
 ## 🛠️ Development
 
