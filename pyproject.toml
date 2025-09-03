@@ -1,0 +1,136 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "corpus-collection-engine"
+version = "1.0.0"
+description = "AI-powered platform for preserving Indian cultural diversity through multi-media corpus collection"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Corpus Collection Engine Contributors"}
+]
+maintainers = [
+    {name = "Corpus Collection Engine Team"}
+]
+keywords = [
+    "cultural-preservation",
+    "corpus-collection",
+    "indian-culture",
+    "streamlit",
+    "ai",
+    "heritage",
+    "multimedia"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Multimedia",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Sociology :: History"
+]
+requires-python = ">=3.8"
+dependencies = [
+    "streamlit>=1.29.0",
+    "Pillow>=10.1.0",
+    "bcrypt>=4.1.2",
+    "PyJWT>=2.8.0",
+    "requests>=2.31.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0"
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/corpus-collection-engine"
+Documentation = "https://github.com/your-org/corpus-collection-engine#readme"
+Repository = "https://github.com/your-org/corpus-collection-engine"
+"Bug Tracker" = "https://github.com/your-org/corpus-collection-engine/issues"
+Changelog = "https://github.com/your-org/corpus-collection-engine/blob/main/CHANGELOG.md"
+
+[project.scripts]
+corpus-engine = "run:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["utils*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+  | data
+)/
+'''
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"]
+exclude = [
+    ".git",
+    "__pycache__",
+    "data/",
+    ".venv/",
+    "build/",
+    "dist/"
+]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+exclude = [
+    "data/",
+    "build/",
+    "dist/"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+    "--cov=utils",
+    "--cov-report=term-missing",
+    "--cov-report=html"
+]
