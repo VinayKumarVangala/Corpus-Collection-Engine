@@ -2,7 +2,7 @@ import streamlit as st
 import uuid
 import math
 from typing import Optional, Dict, Any
-from config import CHUNK_SIZE, MAX_FILE_SIZE
+from config import CHUNK_SIZE, MAX_FILE_SIZE, API_TIMEOUT
 
 def upload_file_chunked(file_data, record_data: Dict[str, Any]) -> Optional[str]:
     """Upload file using chunked upload API"""
@@ -52,23 +52,32 @@ def upload_file_chunked(file_data, record_data: Dict[str, Any]) -> Optional[str]
             'upload_uuid': upload_uuid,
             'filename': filename,
             'total_chunks': total_chunks,
-            'latitude': record_data.get('latitude'),
-            'longitude': record_data.get('longitude'),
-            'release_rights': 'public' if record_data.get('public') else 'private',
+            'release_rights': 'creator' if record_data.get('public') else 'family_or_friend',
             'language': record_data['language']
         }
         
-        result = st.session_state.api_client.request(
-            'POST', '/records/upload',
-            data=upload_data
+        # Add location if provided
+        if record_data.get('latitude') is not None and record_data.get('longitude') is not None:
+            upload_data['latitude'] = record_data['latitude']
+            upload_data['longitude'] = record_data['longitude']
+        
+        # Use form data for upload endpoint
+        result = st.session_state.api_client.session.post(
+            f"{st.session_state.api_client.base_url}/api/v1/records/upload",
+            data=upload_data,
+            timeout=API_TIMEOUT
         )
+        
+        if result.status_code == 201:
+            return result.json().get('uid')
+        else:
+            st.error(f"Upload finalization failed: {result.status_code} - {result.text}")
+            return None
         
         if 'error' not in result:
             return result.get('id')
         else:
             st.error(f"Upload finalization failed: {result['error']}")
-            return None
-            
     except Exception as e:
         st.error(f"Upload error: {str(e)}")
         return None

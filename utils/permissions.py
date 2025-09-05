@@ -6,11 +6,24 @@ def get_user_roles() -> List[Dict[str, Any]]:
     if not st.session_state.user_id:
         return []
     
-    result = st.session_state.api_client.request('GET', f'/users/{st.session_state.user_id}/roles')
+    # Cache roles to avoid repeated API calls
+    if hasattr(st.session_state, 'user_roles_cache'):
+        return st.session_state.user_roles_cache
     
-    if 'error' not in result and isinstance(result, list):
-        return result
-    return []
+    try:
+        result = st.session_state.api_client.request('GET', f'/users/{st.session_state.user_id}/roles')
+        
+        if 'error' not in result and isinstance(result, list):
+            st.session_state.user_roles_cache = result
+            return result
+    except Exception:
+        # If roles endpoint fails, assume basic user role
+        pass
+    
+    # Default to basic user role if API call fails
+    default_roles = [{'name': 'user', 'id': 2}]
+    st.session_state.user_roles_cache = default_roles
+    return default_roles
 
 def has_permission(permission: str) -> bool:
     """Check if user has specific permission"""

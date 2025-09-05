@@ -155,18 +155,29 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# API-compatible categories (fallback if API unavailable)
+# Swecha-compatible categories (21 categories)
 CATEGORIES = {
-    "Art": "🎨",
-    "Culture": "🏛️",
-    "Food": "🍛",
-    "Literature": "📖",
+    "Fables": "📚",
+    "Events": "🎉",
     "Music": "🎵",
+    "Places": "🏛️",
+    "Food": "🍽️",
+    "People": "👥",
+    "Literature": "📖",
     "Architecture": "🏗️",
+    "Skills": "⚡",
+    "Images": "🖼️",
+    "Culture": "🎭",
+    "Flora & Fauna": "🌿",
     "Education": "🎓",
-    "Flora": "🌸",
-    "Fauna": "🦋",
-    "Events": "🎉"
+    "Vegetation": "🌱",
+    "Folk Tales": "📓",
+    "Folk Songs": "🎶",
+    "Traditional Skills": "🛠️",
+    "Local Cultural History": "🏛️",
+    "Local History": "📜",
+    "Food & Agriculture": "🌾",
+    "Newspapers Older Than 1980s": "📰"
 }
 
 MEDIA_TYPES = ["Text", "Image", "Audio", "Video"]
@@ -417,18 +428,29 @@ def show_home():
     </style>
     """, unsafe_allow_html=True)
     
-    # Category descriptions
+    # Category descriptions (matching Swecha)
     descriptions = {
-        "Art": "Creative works, paintings, sculptures, and artistic expressions",
-        "Culture": "Traditions, customs, folklore, memes, people, and cultural practices",
-        "Food": "Culinary content, recipes, agriculture, and food-related information",
-        "Literature": "Books, poems, stories, fables, newspapers, and written works",
+        "Fables": "Traditional stories with moral lessons and mythical characters",
+        "Events": "Happenings, celebrations, and special occasions",
         "Music": "Musical content, songs, instruments, and audio experiences",
-        "Architecture": "Buildings, structures, monuments, and architectural designs",
-        "Education": "Learning materials, skills, tutorials, and educational content",
-        "Flora": "Plants, flowers, trees, vegetation, and botanical content",
-        "Fauna": "Animals, wildlife, birds, and zoological content",
-        "Events": "Festivals, celebrations, ceremonies, and special occasions"
+        "Places": "Locations, landmarks, and geographical content",
+        "Food": "Culinary content, recipes, and food-related information",
+        "People": "Individuals, personalities, and human-related content",
+        "Literature": "Books, poems, writings, and literary works",
+        "Architecture": "Buildings, structures, and architectural designs",
+        "Skills": "Abilities, talents, and learning resources",
+        "Images": "Visual content, pictures, and graphic materials",
+        "Culture": "Cultural traditions, customs, and heritage",
+        "Flora & Fauna": "Plants, animals, and natural life forms",
+        "Education": "Learning materials, courses, and educational content",
+        "Vegetation": "Plant life, gardening, and botanical content",
+        "Folk Tales": "Stories passed orally across generations",
+        "Folk Songs": "Traditional music reflecting cultural heritage",
+        "Traditional Skills": "Local artisanal and craft practices",
+        "Local Cultural History": "Cultural events, rituals, and customs",
+        "Local History": "Historical events and figures significant to region",
+        "Food & Agriculture": "Traditional recipes, cooking methods, practices",
+        "Newspapers Older Than 1980s": "From libraries or archives, scanned or physical copies"
     }
     
     # Category grid - 4 columns per row
@@ -618,7 +640,7 @@ def show_contribute():
     col1, col2 = st.columns(2)
     with col1:
         title = st.text_input("Title (optional)")
-        language = st.selectbox("Language", ["English", "Hindi", "Telugu", "Tamil", "Kannada", "Bengali", "Marathi", "Gujarati", "Malayalam", "Punjabi"])
+        language = st.selectbox("Language", ["Hindi", "Telugu", "Tamil", "Kannada", "Bengali", "Marathi", "Gujarati", "Malayalam", "Punjabi", "Assamese", "Urdu", "Odia", "Sanskrit"])
     
     with col2:
         description = st.text_area("Description (optional)", height=100)
@@ -653,16 +675,27 @@ def show_contribute():
             
             try:
                 if media_type == "Text":
-                    # For text, create record directly
+                    # For text, use description field for content
+                    text_description = description or str(content_data)
+                    
+                    category_id = get_category_id_from_name(category)
+                    
                     api_record = {
                         "title": title or f"{media_type} contribution",
-                        "description": description,
-                        "category_id": get_category_id_from_name(category),
+                        "description": text_description[:1000] if text_description else "",
+                        "category_id": category_id,
+                        "user_id": st.session_state.user_id,
                         "media_type": media_type.lower(),
-                        "content": str(content_data),
                         "language": get_language_enum(language),
-                        "release_rights": "public" if public_consent else "private"
+                        "release_rights": "creator" if public_consent else "family_or_friend"
                     }
+                    
+                    # Add location if provided
+                    if latitude is not None and longitude is not None:
+                        api_record["location"] = {
+                            "latitude": latitude,
+                            "longitude": longitude
+                        }
                     
                     progress_bar.progress(50)
                     status_text.text("Creating text record...")
@@ -932,7 +965,7 @@ def show_browse():
     with col2:
         filter_media = st.selectbox("Filter by Media Type", ["All"] + ["Text", "Audio", "Video", "Image", "Document"])
     with col3:
-        filter_language = st.selectbox("Filter by Language", ["All", "English", "Hindi", "Telugu", "Tamil", "Kannada"])
+        filter_language = st.selectbox("Filter by Language", ["All", "Hindi", "Telugu", "Tamil", "Kannada", "Bengali", "Marathi", "Gujarati", "Malayalam", "Punjabi"])
     
     # Fetch public records from API
     with st.spinner("Loading public contributions..."):

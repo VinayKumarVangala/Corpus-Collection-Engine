@@ -50,10 +50,15 @@ class APIClient:
             kwargs['timeout'] = API_TIMEOUT
             
         try:
-            if DEBUG:
-                st.write(f"API Request: {method} {url}")
-                
             response = self.session.request(method, url, **kwargs)
+            if response.status_code == 422:
+                # Show validation details for 422 errors
+                try:
+                    error_detail = response.json()
+                    if hasattr(st, 'error'):
+                        st.error(f"Validation error: {error_detail}")
+                except:
+                    pass
             response.raise_for_status()
             
             # Handle different response types
@@ -64,29 +69,30 @@ class APIClient:
                 return {"message": "Success", "status_code": response.status_code}
                 
         except requests.exceptions.RequestException as e:
-            error_msg = f"API Connection Error: {str(e)}"
-            if DEBUG:
-                st.error(error_msg)
-            else:
-                st.error("Unable to connect to server. Please check your internet connection.")
             return {"error": str(e)}
     
     # Authentication endpoints
     def send_signup_otp(self, phone: str) -> Dict[Any, Any]:
-        return self.request('POST', '/auth/signup/send-otp', json={'phone': phone})
+        return self.request('POST', '/auth/signup/send-otp', json={'phone_number': phone})
     
     def verify_signup_otp(self, phone: str, otp: str, name: str) -> Dict[Any, Any]:
-        data = {'phone': phone, 'otp': otp, 'name': name}
+        data = {
+            'phone_number': phone, 
+            'otp_code': otp, 
+            'name': name,
+            'password': 'temp123',  # Required by API
+            'has_given_consent': True  # Required by API
+        }
         result = self.request('POST', '/auth/signup/verify-otp', json=data)
         if 'access_token' in result:
             self._save_token(result['access_token'])
         return result
     
     def send_login_otp(self, phone: str) -> Dict[Any, Any]:
-        return self.request('POST', '/auth/login/send-otp', json={'phone': phone})
+        return self.request('POST', '/auth/login/send-otp', json={'phone_number': phone})
     
     def verify_login_otp(self, phone: str, otp: str) -> Dict[Any, Any]:
-        data = {'phone': phone, 'otp': otp}
+        data = {'phone_number': phone, 'otp_code': otp}
         result = self.request('POST', '/auth/login/verify-otp', json=data)
         if 'access_token' in result:
             self._save_token(result['access_token'])

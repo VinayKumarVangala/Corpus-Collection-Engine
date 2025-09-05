@@ -16,10 +16,10 @@ def check_dependencies():
         import bcrypt
         import jwt
         from PIL import Image
-        print("✅ All dependencies are installed")
+        print("All dependencies are installed")
         return True
     except ImportError as e:
-        print(f"❌ Missing dependency: {e}")
+        print(f"Missing dependency: {e}")
         print("Please run: pip install -r requirements.txt")
         return False
 
@@ -33,10 +33,10 @@ def create_directories():
     
     for directory in directories:
         Path(directory).mkdir(parents=True, exist_ok=True)
-        print(f"📁 Created directory: {directory}")
+        print(f"Created directory: {directory}")
 
 def main():
-    print("🏛️ Corpus Collection Engine")
+    print("Corpus Collection Engine")
     print("=" * 50)
     
     # Check dependencies
@@ -47,9 +47,9 @@ def main():
     create_directories()
     
     # Run the enhanced app
-    print("🚀 Starting the application...")
-    print("📱 Open your browser to: http://localhost:8501")
-    print("⏹️  Press Ctrl+C to stop the application")
+    print("Starting the application...")
+    print("Open your browser to: http://localhost:8501")
+    print("Press Ctrl+C to stop the application")
     print("-" * 50)
     
     try:
@@ -59,9 +59,9 @@ def main():
             "--server.address", "localhost"
         ])
     except KeyboardInterrupt:
-        print("\n👋 Application stopped by user")
+        print("\nApplication stopped by user")
     except Exception as e:
-        print(f"❌ Error running application: {e}")
+        print(f"Error running application: {e}")
 
 if __name__ == "__main__":
     main()
