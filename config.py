@@ -1,61 +1,35 @@
 import os
-from pathlib import Path
+from dotenv import load_dotenv
 
-# App Configuration
-APP_NAME = "Corpus Collection Engine"
-APP_VERSION = "1.0.0"
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+# Load environment variables
+load_dotenv()
 
-# File Upload Limits (as per SRD)
-MAX_FILE_SIZES = {
-    "text": 200 * 1024,  # 200KB
-    "image": 10 * 1024 * 1024,  # 10MB
-    "audio": 25 * 1024 * 1024,  # 25MB
-    "video": 100 * 1024 * 1024,  # 100MB
+# API Configuration
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+API_VERSION = os.getenv("API_VERSION", "v1")
+API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))
+
+# Authentication
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key")
+OTP_EXPIRY_MINUTES = int(os.getenv("OTP_EXPIRY_MINUTES", "5"))
+SESSION_TIMEOUT_HOURS = int(os.getenv("SESSION_TIMEOUT_HOURS", "24"))
+
+# File Upload Configuration
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE_MB", "1")) * 1024 * 1024
+MAX_FILE_SIZE = {
+    "text": int(os.getenv("MAX_TEXT_SIZE_KB", "200")) * 1024,
+    "image": int(os.getenv("MAX_IMAGE_SIZE_MB", "10")) * 1024 * 1024,
+    "audio": int(os.getenv("MAX_AUDIO_SIZE_MB", "25")) * 1024 * 1024,
+    "video": int(os.getenv("MAX_VIDEO_SIZE_MB", "100")) * 1024 * 1024,
 }
 
-# Allowed file extensions
-ALLOWED_EXTENSIONS = {
-    "image": [".jpg", ".jpeg", ".png", ".gif", ".webp"],
-    "audio": [".mp3", ".wav", ".ogg", ".m4a"],
-    "video": [".mp4", ".avi", ".mov", ".mkv", ".webm"],
-    "text": [".txt", ".md"]
-}
+# Security
+BCRYPT_ROUNDS = int(os.getenv("BCRYPT_ROUNDS", "12"))
 
-# Languages supported
-SUPPORTED_LANGUAGES = [
-    "English", "Hindi", "Telugu", "Tamil", "Kannada", "Bengali", 
-    "Marathi", "Gujarati", "Malayalam", "Punjabi", "Odia", "Assamese"
-]
+# Environment
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-# Categories
-CATEGORIES = [
-    "Art", "Meme", "Culture", "Food", "Fables", "Events", "Music", "People",
-    "Literature", "Architecture", "Skills", "Images", "Videos", "Flora", "Fauna",
-    "Education", "Vegetation", "Folk Talks", "Traditional Skills", "Local History",
-    "Local Locations", "Food & Agriculture", "Newspapers"
-]
-
-# Storage paths
-DATA_DIR = Path("data")
-UPLOADS_DIR = DATA_DIR / "uploads"
-METADATA_DIR = DATA_DIR / "metadata"
-
-# Create directories
-DATA_DIR.mkdir(exist_ok=True)
-UPLOADS_DIR.mkdir(exist_ok=True)
-METADATA_DIR.mkdir(exist_ok=True)
-
-# Security settings
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-BCRYPT_ROUNDS = 12
-
-# Firebase configuration (if using Firebase)
-FIREBASE_CONFIG = {
-    "apiKey": os.getenv("FIREBASE_API_KEY"),
-    "authDomain": os.getenv("FIREBASE_AUTH_DOMAIN"),
-    "projectId": os.getenv("FIREBASE_PROJECT_ID"),
-    "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET"),
-    "messagingSenderId": os.getenv("FIREBASE_MESSAGING_SENDER_ID"),
-    "appId": os.getenv("FIREBASE_APP_ID")
-}
+# UI Configuration
+CATEGORIES_PER_ROW = 4
+DASHBOARD_RECENT_LIMIT = 5

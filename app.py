@@ -5,6 +5,15 @@ from datetime import datetime
 from pathlib import Path
 import os
 import bcrypt
+from config import API_BASE_URL, ENVIRONMENT, DEBUG
+from utils.api_client import APIClient
+from utils.categories import get_categories
+from utils.file_upload import upload_file_chunked, validate_file_size
+from utils.category_mapper import get_category_id_from_name, get_language_enum
+from utils.geospatial import search_nearby_records, search_in_bbox
+from utils.permissions import has_permission, is_admin, can_export_data
+from utils.data_export import export_user_data, format_export_data
+from admin_panel import show_admin_panel
 
 # Page config
 st.set_page_config(
@@ -146,38 +155,31 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Categories with matching emojis
+# API-compatible categories (fallback if API unavailable)
 CATEGORIES = {
     "Art": "🎨",
-    "Meme": "😂", 
     "Culture": "🏛️",
     "Food": "🍛",
-    "Fables": "📚",
-    "Events": "🎉",
-    "Music": "🎵",
-    "People": "👥",
     "Literature": "📖",
+    "Music": "🎵",
     "Architecture": "🏗️",
-    "Skills": "⚡",
-    "Images": "📸",
-    "Videos": "🎬",
+    "Education": "🎓",
     "Flora": "🌸",
     "Fauna": "🦋",
-    "Education": "🎓",
-    "Vegetation": "🌿",
-    "Folk Talks": "🗣️",
-    "Traditional Skills": "🛠️",
-    "Local History": "📜",
-    "Local Locations": "📍",
-    "Food & Agriculture": "🌾",
-    "Newspapers": "📰"
+    "Events": "🎉"
 }
 
 MEDIA_TYPES = ["Text", "Image", "Audio", "Video"]
 
-# Data persistence functions
+# Dynamic categories from API
+def get_current_categories():
+    """Get categories with caching"""
+    if 'categories' not in st.session_state:
+        st.session_state.categories = get_categories()
+    return st.session_state.categories
+
+# Local storage functions for offline mode
 def load_users():
-    """Load users from persistent storage"""
     users_file = Path("data/users.json")
     if users_file.exists():
         with open(users_file, 'r') as f:
@@ -185,13 +187,11 @@ def load_users():
     return {}
 
 def save_users(users):
-    """Save users to persistent storage"""
     Path("data").mkdir(exist_ok=True)
     with open("data/users.json", 'w') as f:
         json.dump(users, f, indent=2)
 
 def load_contributions():
-    """Load contributions from persistent storage"""
     contrib_file = Path("data/contributions.json")
     if contrib_file.exists():
         with open(contrib_file, 'r') as f:
@@ -199,7 +199,6 @@ def load_contributions():
     return []
 
 def save_contributions(contributions):
-    """Save contributions to persistent storage"""
     Path("data").mkdir(exist_ok=True)
     with open("data/contributions.json", 'w') as f:
         json.dump(contributions, f, indent=2)
@@ -221,7 +220,7 @@ def restore_user_session():
                 session_data = json.load(f)
             if session_data.get('user_id'):
                 st.session_state.user_id = session_data['user_id']
-                st.session_state.user_email = session_data.get('user_email')
+                st.session_state.user_phone = session_data.get('user_phone')
                 st.session_state.user_name = session_data.get('user_name')
                 st.session_state.page = session_data.get('page', 'Home')
         except:
@@ -232,7 +231,7 @@ def save_user_session():
     if st.session_state.user_id:
         session_data = {
             'user_id': st.session_state.user_id,
-            'user_email': st.session_state.user_email,
+            'user_phone': st.session_state.user_phone,
             'user_name': st.session_state.user_name,
             'page': st.session_state.page
         }
@@ -264,13 +263,17 @@ def format_file_size(size_bytes):
     else:
         return f"{size:.1f} {units[unit_index]}"
 
+# Initialize API client
+if 'api_client' not in st.session_state:
+    st.session_state.api_client = APIClient(API_BASE_URL)
+
 # Initialize session state with persistent data
 if 'user_id' not in st.session_state:
     st.session_state.user_id = None
 if 'user_name' not in st.session_state:
     st.session_state.user_name = None
-if 'user_email' not in st.session_state:
-    st.session_state.user_email = None
+if 'user_phone' not in st.session_state:
+    st.session_state.user_phone = None
 if 'contributions' not in st.session_state:
     st.session_state.contributions = load_contributions()
 if 'offline_queue' not in st.session_state:
@@ -279,6 +282,10 @@ if 'registered_users' not in st.session_state:
     st.session_state.registered_users = load_users()
 if 'page_history' not in st.session_state:
     st.session_state.page_history = []
+if 'otp_sent' not in st.session_state:
+    st.session_state.otp_sent = False
+if 'pending_phone' not in st.session_state:
+    st.session_state.pending_phone = None
 
 # Restore user session on app restart
 restore_user_session()
@@ -298,25 +305,44 @@ def main():
     # Create top navbar
     if st.session_state.user_id:
         nav_options = ["Home", "Contribute", "Dashboard", "Browse", "About"]
-        nav_cols = st.columns([1, 1, 1, 1, 1, 0.5])
+        
+        # Add Admin option for admin users
+        if is_admin():
+            nav_options.append("Admin")
+            nav_cols = st.columns([1, 1, 1, 1, 1, 1, 0.5])
+        else:
+            nav_cols = st.columns([1, 1, 1, 1, 1, 0.5])
         
         for i, option in enumerate(nav_options):
             with nav_cols[i]:
-                if st.button(option, key=f"nav_{option}", use_container_width=True, 
-                           type="primary" if option == st.session_state.page else "secondary"):
+                button_type = "primary" if option == st.session_state.page else "secondary"
+                if option == "Admin":
+                    button_type = "secondary"  # Admin button always secondary style
+                    
+                if st.button(option, key=f"nav_{option}", use_container_width=True, type=button_type):
                     if st.session_state.page != option:
                         st.session_state.page = option
                         save_user_session()
                         st.rerun()
         
-        # Logout button
-        with nav_cols[5]:
+        # Logout button with role indicator
+        logout_col_index = len(nav_options)
+        with nav_cols[logout_col_index]:
+            # Show user role if admin/reviewer
+            if is_admin():
+                st.caption("🔑 Admin")
+            elif has_permission('records:write'):
+                st.caption("🔍 Reviewer")
+                
             if st.button("Logout", key="logout_btn", use_container_width=True, type="secondary"):
-                # Clear session but keep persistent data
+                # Clear API session and local session
+                st.session_state.api_client.logout()
                 clear_user_session()
                 st.session_state.user_id = None
                 st.session_state.user_name = None
-                st.session_state.user_email = None
+                st.session_state.user_phone = None
+                st.session_state.otp_sent = False
+                st.session_state.pending_phone = None
                 st.session_state.page = "Login"
                 st.rerun()
     else:
@@ -347,6 +373,8 @@ def main():
         show_browse()
     elif page == "About":
         show_about()
+    elif page == "Admin":
+        show_admin_panel()
 
 def show_home():
     if st.session_state.user_id:
@@ -391,34 +419,22 @@ def show_home():
     
     # Category descriptions
     descriptions = {
-        "Art": "Creative works, paintings, and artistic expressions",
-        "Meme": "Humorous content and cultural references", 
-        "Culture": "Cultural traditions, customs, and practices",
-        "Food": "Culinary content, recipes, and food-related information",
-        "Fables": "Traditional stories with moral lessons and mythical characters",
-        "Events": "Happenings, celebrations, and special occasions",
+        "Art": "Creative works, paintings, sculptures, and artistic expressions",
+        "Culture": "Traditions, customs, folklore, memes, people, and cultural practices",
+        "Food": "Culinary content, recipes, agriculture, and food-related information",
+        "Literature": "Books, poems, stories, fables, newspapers, and written works",
         "Music": "Musical content, songs, instruments, and audio experiences",
-        "People": "Individuals, personalities, and human-related content",
-        "Literature": "Books, poems, writings, and literary works",
-        "Architecture": "Buildings, structures, and architectural designs",
-        "Skills": "Abilities, talents, and learning",
-        "Images": "Visual content, pictures, and photography",
-        "Videos": "Video content and multimedia experiences",
-        "Flora": "Plants, flowers, and botanical content",
-        "Fauna": "Animals, wildlife, and zoological content",
-        "Education": "Learning materials and educational content",
-        "Vegetation": "Plant life, gardens, and natural growth",
-        "Folk Talks": "Traditional conversations and oral traditions",
-        "Traditional Skills": "Heritage crafts and ancestral knowledge",
-        "Local History": "Regional stories and historical accounts",
-        "Local Locations": "Places, landmarks, and geographical content",
-        "Food & Agriculture": "Farming, crops, and agricultural practices",
-        "Newspapers": "News articles and journalistic content"
+        "Architecture": "Buildings, structures, monuments, and architectural designs",
+        "Education": "Learning materials, skills, tutorials, and educational content",
+        "Flora": "Plants, flowers, trees, vegetation, and botanical content",
+        "Fauna": "Animals, wildlife, birds, and zoological content",
+        "Events": "Festivals, celebrations, ceremonies, and special occasions"
     }
     
     # Category grid - 4 columns per row
     cols_per_row = 4
-    categories_list = list(CATEGORIES.items())
+    categories = get_current_categories()
+    categories_list = list(categories.items())
     
     for i in range(0, len(categories_list), cols_per_row):
         cols = st.columns(cols_per_row)
@@ -446,63 +462,112 @@ def show_login():
     tab1, tab2 = st.tabs(["Login", "Register"])
     
     with tab1:
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        if st.button("Login", type="primary"):
-            if email and password:
-                # Check if user is registered
-                if email in st.session_state.registered_users:
-                    stored_password_hash = st.session_state.registered_users[email]['password']
-                    if verify_password(password, stored_password_hash):
-                        st.session_state.user_id = hashlib.md5(email.encode()).hexdigest()[:8]
-                        st.session_state.user_email = email
-                        st.session_state.user_name = st.session_state.registered_users[email]['name']
-                        st.session_state.page = "Home"
-                        save_user_session()  # Save session for persistence
-                        st.success("Logged in successfully!")
-                        st.balloons()
-                        # Force page refresh by using experimental_rerun
-                        try:
-                            st.experimental_rerun()
-                        except:
-                            st.rerun()
+        st.subheader("Login with Phone")
+        phone = st.text_input("Phone Number", placeholder="+91XXXXXXXXXX")
+        
+        if not st.session_state.otp_sent:
+            if st.button("Send OTP", type="primary"):
+                if phone:
+                    result = st.session_state.api_client.send_login_otp(phone)
+                    if 'error' not in result:
+                        st.session_state.otp_sent = True
+                        st.session_state.pending_phone = phone
+                        st.success("OTP sent to your phone!")
+                        st.rerun()
                     else:
-                        st.error("Invalid password!")
+                        st.error("Failed to send OTP. Please try again.")
                 else:
-                    st.error("User not registered. Please register first.")
-            else:
-                st.error("Please enter both email and password.")
+                    st.error("Please enter your phone number.")
+        else:
+            otp = st.text_input("Enter OTP", max_chars=6)
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("Verify OTP", type="primary"):
+                    if otp:
+                        result = st.session_state.api_client.verify_login_otp(st.session_state.pending_phone, otp)
+                        if 'access_token' in result:
+                            # Get user info
+                            user_info = st.session_state.api_client.get_current_user()
+                            if 'error' not in user_info:
+                                st.session_state.user_id = user_info['id']
+                                st.session_state.user_name = user_info.get('name', 'User')
+                                st.session_state.user_phone = st.session_state.pending_phone
+                                st.session_state.page = "Home"
+                                st.session_state.otp_sent = False
+                                st.session_state.pending_phone = None
+                                st.success("Logged in successfully!")
+                                st.balloons()
+                                st.rerun()
+                        else:
+                            st.error("Invalid OTP. Please try again.")
+                    else:
+                        st.error("Please enter the OTP.")
+            
+            with col2:
+                if st.button("Resend OTP"):
+                    result = st.session_state.api_client.send_login_otp(st.session_state.pending_phone)
+                    if 'error' not in result:
+                        st.success("OTP resent!")
+                    else:
+                        st.error("Failed to resend OTP.")
     
     with tab2:
-        reg_email = st.text_input("Email", key="reg_email")
+        st.subheader("Register with Phone")
+        reg_phone = st.text_input("Phone Number", key="reg_phone", placeholder="+91XXXXXXXXXX")
         reg_name = st.text_input("Display Name")
-        reg_password = st.text_input("Password", type="password", key="reg_password")
-        if st.button("Register", type="primary"):
-            if reg_email and reg_name and reg_password:
-                if reg_email not in st.session_state.registered_users:
-                    # Store user credentials with hashed password
-                    st.session_state.registered_users[reg_email] = {
-                        'name': reg_name,
-                        'password': hash_password(reg_password),
-                        'created_at': datetime.now().isoformat()
-                    }
-                    save_users(st.session_state.registered_users)
-                    st.session_state.user_id = hashlib.md5(reg_email.encode()).hexdigest()[:8]
-                    st.session_state.user_email = reg_email
-                    st.session_state.user_name = reg_name
-                    st.session_state.page = "Home"
-                    save_user_session()  # Save session for persistence
-                    st.success("Registered successfully!")
-                    st.balloons()
-                    # Force page refresh
-                    try:
-                        st.experimental_rerun()
-                    except:
+        
+        if not st.session_state.otp_sent:
+            if st.button("Send OTP", key="reg_send_otp", type="primary"):
+                if reg_phone and reg_name:
+                    result = st.session_state.api_client.send_signup_otp(reg_phone)
+                    if 'error' not in result:
+                        st.session_state.otp_sent = True
+                        st.session_state.pending_phone = reg_phone
+                        st.session_state.pending_name = reg_name
+                        st.success("OTP sent to your phone!")
                         st.rerun()
+                    else:
+                        st.error("Failed to send OTP. Please try again.")
                 else:
-                    st.error("Email already registered. Please use a different email or login.")
-            else:
-                st.error("Please fill in all fields.")
+                    st.error("Please fill in all fields.")
+        else:
+            otp = st.text_input("Enter OTP", key="reg_otp", max_chars=6)
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("Verify & Register", type="primary"):
+                    if otp:
+                        result = st.session_state.api_client.verify_signup_otp(
+                            st.session_state.pending_phone, 
+                            otp, 
+                            st.session_state.pending_name
+                        )
+                        if 'access_token' in result:
+                            # Get user info
+                            user_info = st.session_state.api_client.get_current_user()
+                            if 'error' not in user_info:
+                                st.session_state.user_id = user_info['id']
+                                st.session_state.user_name = user_info.get('name', 'User')
+                                st.session_state.user_phone = st.session_state.pending_phone
+                                st.session_state.page = "Home"
+                                st.session_state.otp_sent = False
+                                st.session_state.pending_phone = None
+                                st.success("Registered successfully!")
+                                st.balloons()
+                                st.rerun()
+                        else:
+                            st.error("Registration failed. Please try again.")
+                    else:
+                        st.error("Please enter the OTP.")
+            
+            with col2:
+                if st.button("Resend OTP", key="reg_resend"):
+                    result = st.session_state.api_client.send_signup_otp(st.session_state.pending_phone)
+                    if 'error' not in result:
+                        st.success("OTP resent!")
+                    else:
+                        st.error("Failed to resend OTP.")
 
 def show_contribute():
     if not st.session_state.user_id:
@@ -512,11 +577,12 @@ def show_contribute():
     st.header("Contribute Content")
     
     # Step 1: Category Selection
+    categories = get_current_categories()
     if 'selected_category' in st.session_state and st.session_state.selected_category:
-        category = st.selectbox("Select Category", list(CATEGORIES.keys()), 
-                               index=list(CATEGORIES.keys()).index(st.session_state.selected_category))
+        category = st.selectbox("Select Category", list(categories.keys()), 
+                               index=list(categories.keys()).index(st.session_state.selected_category))
     else:
-        category = st.selectbox("Select Category", list(CATEGORIES.keys()))
+        category = st.selectbox("Select Category", list(categories.keys()))
     
     # Step 2: Media Type
     media_type = st.selectbox("Select Media Type", MEDIA_TYPES)
@@ -558,32 +624,99 @@ def show_contribute():
         description = st.text_area("Description (optional)", height=100)
         public_consent = st.checkbox("Make this contribution public")
     
+    # Step 4.5: Location (optional)
+    st.subheader("🗺️ Location (Optional)")
+    add_location = st.checkbox("Add location to this contribution")
+    
+    latitude = None
+    longitude = None
+    
+    if add_location:
+        col1, col2 = st.columns(2)
+        with col1:
+            latitude = st.number_input("Latitude", value=17.385, format="%.6f", help="Decimal degrees")
+        with col2:
+            longitude = st.number_input("Longitude", value=78.4867, format="%.6f", help="Decimal degrees")
+        
+        st.info("📍 This will help others discover your contribution based on location.")
+    
     # Step 5: Submit
     if st.button("Submit Contribution", type="primary"):
         if content_data:
-            contribution = {
-                "id": hashlib.md5(f"{st.session_state.user_id}{datetime.now().isoformat()}".encode()).hexdigest()[:12],
-                "user_id": st.session_state.user_id,
-                "category": category,
-                "media_type": media_type,
-                "title": title or f"{media_type} contribution",
-                "description": description,
-                "language": language,
-                "public": public_consent,
-                "timestamp": datetime.now().isoformat(),
-                "size": len(str(content_data)) if media_type == "Text" else len(content_data.getvalue()) if hasattr(content_data, 'getvalue') else 0
-            }
+            # Validate file size for non-text content
+            if media_type != "Text" and not validate_file_size(content_data, media_type):
+                return
             
-            # Add to contributions
-            st.session_state.contributions.append(contribution)
+            # Show progress
+            progress_bar = st.progress(0)
+            status_text = st.empty()
             
-            # Save content and update persistent storage
-            if save_contribution(contribution, content_data):
-                save_contributions(st.session_state.contributions)
-                st.success("Contribution submitted successfully!")
-                st.balloons()
-            else:
-                st.error("Failed to save contribution. Please try again.")
+            try:
+                if media_type == "Text":
+                    # For text, create record directly
+                    api_record = {
+                        "title": title or f"{media_type} contribution",
+                        "description": description,
+                        "category_id": get_category_id_from_name(category),
+                        "media_type": media_type.lower(),
+                        "content": str(content_data),
+                        "language": get_language_enum(language),
+                        "release_rights": "public" if public_consent else "private"
+                    }
+                    
+                    progress_bar.progress(50)
+                    status_text.text("Creating text record...")
+                    
+                    result = st.session_state.api_client.create_record(api_record)
+                    
+                    if 'error' not in result:
+                        progress_bar.progress(100)
+                        status_text.text("Success!")
+                        st.success("Text contribution submitted successfully!")
+                        st.balloons()
+                        
+                        # Clear form
+                        if 'selected_category' in st.session_state:
+                            del st.session_state.selected_category
+                    else:
+                        st.error(f"Failed to submit: {result['error']}")
+                        
+                else:
+                    # For files, use chunked upload
+                    status_text.text("Uploading file...")
+                    progress_bar.progress(25)
+                    
+                    record_data = {
+                        "title": title or f"{media_type} contribution",
+                        "description": description,
+                        "category_id": get_category_id_from_name(category),
+                        "media_type": media_type,
+                        "language": get_language_enum(language),
+                        "public": public_consent,
+                        "latitude": latitude,
+                        "longitude": longitude
+                    }
+                    
+                    record_id = upload_file_chunked(content_data, record_data)
+                    
+                    if record_id:
+                        progress_bar.progress(100)
+                        status_text.text("Success!")
+                        st.success("File contribution submitted successfully!")
+                        st.balloons()
+                        
+                        # Clear form
+                        if 'selected_category' in st.session_state:
+                            del st.session_state.selected_category
+                    else:
+                        st.error("Failed to upload file. Please try again.")
+                        
+            except Exception as e:
+                st.error(f"Submission error: {str(e)}")
+            finally:
+                progress_bar.empty()
+                status_text.empty()
+                
         else:
             st.error("Please provide content before submitting!")
 
@@ -594,114 +727,266 @@ def show_dashboard():
     
     st.header("Your Dashboard")
     
-    user_contributions = [c for c in st.session_state.contributions if c['user_id'] == st.session_state.user_id]
+    # Fetch user contributions from API
+    with st.spinner("Loading your contributions..."):
+        contributions_data = st.session_state.api_client.get_user_contributions(st.session_state.user_id)
     
-    if not user_contributions:
+    if 'error' in contributions_data:
+        st.error("Failed to load contributions. Please try again.")
+        return
+    
+    total_contributions = contributions_data.get('total_contributions', 0)
+    
+    if total_contributions == 0:
         st.info("No contributions yet. Start contributing to see your stats!")
         return
     
     # Stats with colorful cards
     col1, col2, col3, col4 = st.columns(4)
     
+    # Get media type counts
+    media_counts = contributions_data.get('contributions_by_media_type', {})
+    
     with col1:
-        st.markdown("""
+        st.markdown(f"""
         <div style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); padding: 25px; border-radius: 16px; text-align: center; box-shadow: 0 6px 20px rgba(52, 152, 219, 0.3); border: 1px solid #e9ecef;">
             <h3 style="color: white; margin: 0; font-size: 28px;">📊</h3>
-            <h2 style="color: white; margin: 10px 0; font-size: 32px;">{}</h2>
+            <h2 style="color: white; margin: 10px 0; font-size: 32px;">{total_contributions}</h2>
             <p style="color: white; margin: 0; font-size: 14px;">Total Contributions</p>
         </div>
-        """.format(len(user_contributions)), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     with col2:
-        total_size = sum(c.get('size', 0) for c in user_contributions)
-        formatted_size = format_file_size(total_size)
-        st.markdown("""
+        # Calculate total duration for audio/video
+        audio_duration = contributions_data.get('audio_duration', 0)
+        video_duration = contributions_data.get('video_duration', 0)
+        total_duration = audio_duration + video_duration
+        duration_text = f"{total_duration//60}m {total_duration%60}s" if total_duration > 0 else "0s"
+        
+        st.markdown(f"""
         <div style="background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); padding: 25px; border-radius: 16px; text-align: center; box-shadow: 0 6px 20px rgba(46, 204, 113, 0.3); border: 1px solid #e9ecef;">
-            <h3 style="color: white; margin: 0; font-size: 28px;">💾</h3>
-            <h2 style="color: white; margin: 10px 0; font-size: 32px;">{}</h2>
-            <p style="color: white; margin: 0; font-size: 14px;">Total Size</p>
+            <h3 style="color: white; margin: 0; font-size: 28px;">⏱️</h3>
+            <h2 style="color: white; margin: 10px 0; font-size: 32px;">{duration_text}</h2>
+            <p style="color: white; margin: 0; font-size: 14px;">Media Duration</p>
         </div>
-        """.format(formatted_size), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     with col3:
-        categories = len(set(c['category'] for c in user_contributions))
-        st.markdown("""
+        # Count unique categories from contributions
+        all_contributions = []
+        for media_type in ['text_contributions', 'audio_contributions', 'video_contributions', 'image_contributions', 'document_contributions']:
+            contribs = contributions_data.get(media_type, [])
+            if contribs:
+                all_contributions.extend(contribs)
+        
+        unique_categories = len(set(c.get('category_id', '') for c in all_contributions if c.get('category_id')))
+        
+        st.markdown(f"""
         <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); padding: 25px; border-radius: 16px; text-align: center; box-shadow: 0 6px 20px rgba(231, 76, 60, 0.3); border: 1px solid #e9ecef;">
             <h3 style="color: white; margin: 0; font-size: 28px;">📂</h3>
-            <h2 style="color: white; margin: 10px 0; font-size: 32px;">{}</h2>
+            <h2 style="color: white; margin: 10px 0; font-size: 32px;">{unique_categories}</h2>
             <p style="color: white; margin: 0; font-size: 14px;">Categories</p>
         </div>
-        """.format(categories), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     with col4:
-        public_count = sum(1 for c in user_contributions if c.get('public', False))
-        st.markdown("""
+        # Count public contributions
+        public_count = sum(1 for c in all_contributions if c.get('release_rights') == 'public')
+        
+        st.markdown(f"""
         <div style="background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); padding: 25px; border-radius: 16px; text-align: center; box-shadow: 0 6px 20px rgba(243, 156, 18, 0.3); border: 1px solid #e9ecef;">
             <h3 style="color: white; margin: 0; font-size: 28px;">🌍</h3>
-            <h2 style="color: white; margin: 10px 0; font-size: 32px;">{}</h2>
+            <h2 style="color: white; margin: 10px 0; font-size: 32px;">{public_count}</h2>
             <p style="color: white; margin: 0; font-size: 14px;">Public Contributions</p>
         </div>
-        """.format(public_count), unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     # Media type breakdown
     st.subheader("Contributions by Media Type")
-    media_counts = {}
-    for contrib in user_contributions:
-        media_type = contrib['media_type']
-        media_counts[media_type] = media_counts.get(media_type, 0) + 1
-    
     if media_counts:
-        st.bar_chart(media_counts)
+        chart_data = {
+            'Text': media_counts.get('text', 0),
+            'Audio': media_counts.get('audio', 0),
+            'Video': media_counts.get('video', 0),
+            'Image': media_counts.get('image', 0),
+            'Document': media_counts.get('document', 0)
+        }
+        # Filter out zero values
+        chart_data = {k: v for k, v in chart_data.items() if v > 0}
+        if chart_data:
+            st.bar_chart(chart_data)
+    
+    # Data Export Section
+    if can_export_data():
+        st.subheader("📥 Data Export")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            export_format = st.selectbox("Export Format", ["JSON", "CSV"])
+        
+        with col2:
+            if st.button("Export My Data", type="secondary"):
+                with st.spinner("Preparing export..."):
+                    export_result = export_user_data(export_format.lower())
+                    
+                    if 'error' not in export_result:
+                        st.success("Export initiated! Check back in a few minutes.")
+                        if 'task_id' in export_result:
+                            st.info(f"Task ID: {export_result['task_id']}")
+                    else:
+                        st.error(f"Export failed: {export_result['error']}")
+        
+        with col3:
+            st.info("🔒 Available for authorized users")
     
     # Recent contributions
     st.subheader("Recent Contributions")
-    for contrib in sorted(user_contributions, key=lambda x: x['timestamp'], reverse=True)[:5]:
-        with st.expander(f"{contrib['title']} ({contrib['media_type']})"):
+    recent_contributions = all_contributions[:5] if all_contributions else []
+    
+    for contrib in recent_contributions:
+        with st.expander(f"{contrib.get('title', 'Untitled')} ({contrib.get('media_type', 'Unknown').title()})"):
             col1, col2 = st.columns(2)
             with col1:
-                st.write(f"**Category:** {contrib['category']}")
-                st.write(f"**Language:** {contrib['language']}")
+                st.write(f"**Category ID:** {contrib.get('category_id', 'N/A')}")
+                st.write(f"**Language:** {contrib.get('language', 'N/A').title()}")
+                # Show location if available
+                if contrib.get('latitude') and contrib.get('longitude'):
+                    st.write(f"🗺️ **Location:** {contrib['latitude']:.4f}, {contrib['longitude']:.4f}")
             with col2:
-                st.write(f"**Date:** {contrib['timestamp'][:10]}")
-                st.write(f"**Public:** {'Yes' if contrib.get('public') else 'No'}")
+                timestamp = contrib.get('timestamp')
+                if timestamp:
+                    date_str = timestamp[:10] if len(timestamp) >= 10 else timestamp
+                    st.write(f"**Date:** {date_str}")
+                st.write(f"**Public:** {'Yes' if contrib.get('release_rights') == 'public' else 'No'}")
+                if contrib.get('size'):
+                    st.write(f"**Size:** {format_file_size(contrib['size'])}")
 
 def show_browse():
-    st.header("Browse Contributions")
+    st.header("Browse Public Contributions")
     
-    # Filters
+    # Search mode selection
+    search_mode = st.radio("Search Mode", ["All Records", "Location-based Search"], horizontal=True)
+    
+    if search_mode == "Location-based Search":
+        st.subheader("🗺️ Location-based Search")
+        
+        # Location input
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            latitude = st.number_input("Latitude", value=17.385, format="%.6f")
+        with col2:
+            longitude = st.number_input("Longitude", value=78.4867, format="%.6f")
+        with col3:
+            distance = st.slider("Search Radius (km)", 1, 50, 10)
+        
+        # Additional filters
+        col1, col2 = st.columns(2)
+        with col1:
+            categories = get_current_categories()
+            filter_category = st.selectbox("Filter by Category", ["All"] + list(categories.keys()))
+        with col2:
+            filter_media = st.selectbox("Filter by Media Type", ["All"] + ["Text", "Audio", "Video", "Image", "Document"])
+        
+        if st.button("Search Nearby", type="primary"):
+            with st.spinner("Searching nearby contributions..."):
+                category_id = None if filter_category == "All" else get_category_id_from_name(filter_category)
+                media_type = None if filter_media == "All" else filter_media
+                
+                nearby_records = search_nearby_records(latitude, longitude, distance, category_id, media_type)
+                
+                if nearby_records:
+                    st.success(f"Found {len(nearby_records)} contributions within {distance}km")
+                    
+                    for record in nearby_records:
+                        with st.container():
+                            col1, col2 = st.columns([3, 1])
+                            with col1:
+                                st.write(f"**{record.get('title', 'Untitled')}**")
+                                media_type_display = record.get('media_type', 'unknown').title()
+                                language_display = record.get('language', 'unknown').title()
+                                st.write(f"Type: {media_type_display} | Language: {language_display}")
+                                if record.get('description'):
+                                    st.write(record['description'])
+                            with col2:
+                                # Show distance if available
+                                if 'distance' in record:
+                                    st.write(f"📍 {record['distance']:.1f}km")
+                                timestamp = record.get('created_at') or record.get('timestamp')
+                                if timestamp:
+                                    date_str = timestamp[:10] if len(timestamp) >= 10 else timestamp
+                                    st.write(f"📅 {date_str}")
+                            st.divider()
+                else:
+                    st.info("No contributions found in this area.")
+        return
+    
+    # Regular filters for "All Records" mode
     col1, col2, col3 = st.columns(3)
+    
+    # Get categories for filter
+    categories = get_current_categories()
+    
     with col1:
-        filter_category = st.selectbox("Filter by Category", ["All"] + list(CATEGORIES.keys()))
+        filter_category = st.selectbox("Filter by Category", ["All"] + list(categories.keys()))
     with col2:
-        filter_media = st.selectbox("Filter by Media Type", ["All"] + MEDIA_TYPES)
+        filter_media = st.selectbox("Filter by Media Type", ["All"] + ["Text", "Audio", "Video", "Image", "Document"])
     with col3:
         filter_language = st.selectbox("Filter by Language", ["All", "English", "Hindi", "Telugu", "Tamil", "Kannada"])
     
-    # Get public contributions
-    public_contributions = [c for c in st.session_state.contributions if c.get('public', False)]
+    # Fetch public records from API
+    with st.spinner("Loading public contributions..."):
+        filters = {}
+        if filter_category != "All":
+            filters['category_id'] = filter_category
+        if filter_media != "All":
+            filters['media_type'] = filter_media.lower()
+        
+        records = st.session_state.api_client.get_records(**filters)
     
-    # Apply filters
-    filtered = public_contributions
-    if filter_category != "All":
-        filtered = [c for c in filtered if c['category'] == filter_category]
-    if filter_media != "All":
-        filtered = [c for c in filtered if c['media_type'] == filter_media]
+    if 'error' in records:
+        st.error("Failed to load contributions. Please try again.")
+        return
+    
+    # Filter by language if specified
     if filter_language != "All":
-        filtered = [c for c in filtered if c['language'] == filter_language]
+        records = [r for r in records if r.get('language', '').lower() == filter_language.lower()]
     
-    st.write(f"Found {len(filtered)} contributions")
+    # Only show public records
+    public_records = [r for r in records if r.get('release_rights') == 'public']
+    
+    st.write(f"Found {len(public_records)} public contributions")
     
     # Display contributions
-    for contrib in filtered:
+    for record in public_records:
         with st.container():
             col1, col2 = st.columns([3, 1])
             with col1:
-                st.write(f"**{contrib['title']}**")
-                st.write(f"Category: {contrib['category']} | Type: {contrib['media_type']} | Language: {contrib['language']}")
-                if contrib.get('description'):
-                    st.write(contrib['description'])
+                st.write(f"**{record.get('title', 'Untitled')}**")
+                media_type = record.get('media_type', 'unknown').title()
+                language = record.get('language', 'unknown').title()
+                category_id = record.get('category_id', 'N/A')
+                st.write(f"Category: {category_id} | Type: {media_type} | Language: {language}")
+                if record.get('description'):
+                    st.write(record['description'])
+                
+                # Show location if available
+                if record.get('latitude') and record.get('longitude'):
+                    st.write(f"📍 Location: {record['latitude']:.4f}, {record['longitude']:.4f}")
+                    
             with col2:
-                st.write(f"📅 {contrib['timestamp'][:10]}")
+                timestamp = record.get('created_at') or record.get('timestamp')
+                if timestamp:
+                    date_str = timestamp[:10] if len(timestamp) >= 10 else timestamp
+                    st.write(f"📅 {date_str}")
+                if record.get('size'):
+                    st.write(f"📊 {format_file_size(record['size'])}")
+                    
+                # Admin actions
+                if is_admin():
+                    if st.button(f"View Details", key=f"view_{record.get('id')}", help="Admin view"):
+                        st.info(f"Record ID: {record.get('id')}")
+                        
             st.divider()
 
 def show_about():
@@ -729,7 +1014,8 @@ def show_about():
     
     # Display categories in a grid
     cols = st.columns(4)
-    for i, (category, emoji) in enumerate(CATEGORIES.items()):
+    categories = get_current_categories()
+    for i, (category, emoji) in enumerate(categories.items()):
         with cols[i % 4]:
             st.markdown(f"**{emoji} {category}**")
     

@@ -4,10 +4,10 @@ An AI-powered, open-source Streamlit application for preserving Indian culture a
 
 ## ✨ Features
 
-- **Multi-Category Collection**: 23+ categories including Art, Culture, Food, Literature, Music, and more
-- **Multi-Media Support**: Text, Image, Audio, and Video uploads
-- **Persistent Storage**: User data and contributions saved permanently
-- **Secure Authentication**: bcrypt password hashing and user management
+- **Multi-Category Collection**: 10 API-compatible categories optimized for cultural preservation
+- **Multi-Media Support**: Text, Image, Audio, and Video uploads with chunked upload
+- **Backend Integration**: Full API connectivity with environment-based configuration
+- **Secure Authentication**: Phone/OTP authentication with JWT token management
 - **User Dashboard**: Track contributions, view stats, and manage content
 - **Modern UI**: Professional dark/light theme with square category buttons
 - **Top Navigation**: Clean navbar with Home, Contribute, Dashboard, Browse, About, and Logout
@@ -15,25 +15,34 @@ An AI-powered, open-source Streamlit application for preserving Indian culture a
 
 ## 🚀 Quick Start
 
-### Method 1: Using the Runner Script (Recommended)
+### Step 1: Environment Setup
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Copy environment template
+cp .env.example .env
 
-# Run the application with automatic setup
-python run.py
+# Edit .env with your API credentials
+# Update API_BASE_URL and JWT_SECRET_KEY
 ```
 
-### Method 2: Manual Setup
+### Step 2: Install Dependencies
 ```bash
-# Install dependencies
 pip install -r requirements.txt
+```
 
-# Initialize data storage
-python init_data.py
+### Step 3: Run Application
+```bash
+# Method 1: Using runner script (Recommended)
+python run.py
 
-# Run the application
+# Method 2: Direct streamlit
 streamlit run app.py
+```
+
+### Step 4: Configure Environment
+Edit `.env` file with your actual values:
+```env
+API_BASE_URL=https://your-actual-api-domain.com
+JWT_SECRET_KEY=your-actual-jwt-secret-key
 ```
 
 ### Access the App
@@ -43,19 +52,20 @@ Open your browser to `http://localhost:8501`
 
 ```
 ├── app.py                 # Main Streamlit application
+├── config.py              # Environment-based configuration
 ├── run.py                 # Application runner with setup
-├── init_data.py          # Data storage initialization
-├── requirements.txt      # Python dependencies
-├── data/                 # Persistent data storage
-│   ├── users.json       # User credentials (hashed passwords)
-│   ├── contributions.json # All contribution metadata
-│   ├── uploads/         # Media files (images, audio, video)
-│   └── metadata/        # Additional metadata storage
-├── utils/               # Utility modules
-│   ├── auth.py         # Authentication utilities
-│   ├── database.py     # Database operations
-│   └── file_handler.py # File processing utilities
-└── README.md           # This file
+├── requirements.txt       # Python dependencies
+├── .env.example          # Environment variables template
+├── .gitignore            # Git ignore rules
+├── utils/                # Utility modules
+│   ├── api_client.py     # Backend API integration
+│   ├── categories.py     # Category management
+│   ├── file_upload.py    # Chunked file upload
+│   ├── geospatial.py     # Location-based features
+│   ├── permissions.py    # Role-based access control
+│   └── data_export.py    # Data export functionality
+├── admin_panel.py        # Admin management interface
+└── README.md             # Documentation
 ```
 
 ## 🎯 Usage Guide
@@ -107,16 +117,20 @@ Open your browser to `http://localhost:8501`
 
 ## 🎨 Categories Supported
 
-| Category  | Category  | Category  |
-|-----------------|-----------------|-------------------|
-| Art  🎨 | Meme  😂 | Culture  🏛️ |
-| Food  🍛 | Fables  📚 | Events  🎉 |
-| Music  🎵 | People  👥 | Literature  📖 |
-| Architecture  🏗️ | Skills  ⚡ | Images  📸 |
-| Videos  🎬 | Flora  🌸 | Fauna  🦋 |
-| Education  🎓 | Vegetation  🌿 | Folk Talks  🗣️ |
-| Traditional Skills  🛠️ | Local History  📜 | Local Locations  📍 |
-| Food & Agriculture  🌾 | Newspapers  📰 | | |
+**10 API-Compatible Categories:**
+
+| Category | Description |
+|----------|-------------|
+| Art 🎨 | Creative works, paintings, sculptures, and artistic expressions |
+| Culture 🏛️ | Traditions, customs, folklore, people, and cultural practices |
+| Food 🍛 | Culinary content, recipes, agriculture, and food-related information |
+| Literature 📖 | Books, poems, stories, newspapers, and written works |
+| Music 🎵 | Musical content, songs, instruments, and audio experiences |
+| Architecture 🏗️ | Buildings, structures, monuments, and architectural designs |
+| Education 🎓 | Learning materials, skills, tutorials, and educational content |
+| Flora 🌸 | Plants, flowers, trees, vegetation, and botanical content |
+| Fauna 🦋 | Animals, wildlife, birds, and zoological content |
+| Events 🎉 | Festivals, celebrations, ceremonies, and special occasions |
 
 ## 🛠️ Development
 
