@@ -13,25 +13,13 @@ from utils.database import db
 import hashlib
 import bcrypt
 from utils.file_handler import save_file, validate_file, get_file_info
-# from config import SUPPORTED_LANGUAGES, MAX_FILE_SIZES
+from config import SUPPORTED_LANGUAGES, MAX_FILE_SIZES
 
 # Updated categories to match the image
 CATEGORIES = [
     "Fables", "Events", "Music", "Places", "Food", "People",
     "Literature", "Architecture", "Skills", "Images", "Culture", "Flora & Fauna"
 ]
-
-SUPPORTED_LANGUAGES = [
-    "English", "Hindi", "Telugu", "Tamil", "Kannada", "Bengali", 
-    "Marathi", "Gujarati", "Malayalam", "Punjabi", "Odia", "Assamese"
-]
-
-MAX_FILE_SIZES = {
-    "text": 200 * 1024,  # 200KB
-    "image": 10 * 1024 * 1024,  # 10MB
-    "audio": 25 * 1024 * 1024,  # 25MB
-    "video": 100 * 1024 * 1024,  # 100MB
-}
 
 # Page config
 st.set_page_config(

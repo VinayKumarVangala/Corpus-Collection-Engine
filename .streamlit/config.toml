@@ -5,13 +5,12 @@ developmentMode = false
 headless = true
 enableCORS = false
 enableXsrfProtection = true
-port = 8501
 
 [browser]
 gatherUsageStats = false
 
 [theme]
-primaryColor = "#667eea"
+primaryColor = "#FF6B35"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F0F2F6"
 textColor = "#262730"
