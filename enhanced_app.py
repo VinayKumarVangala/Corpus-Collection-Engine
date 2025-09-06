@@ -9,9 +9,17 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from utils.database import db
-from utils.auth import hash_password, verify_password, create_jwt_token
+# from utils.auth import hash_password, verify_password, create_jwt_token
+import hashlib
+import bcrypt
 from utils.file_handler import save_file, validate_file, get_file_info
-from config import CATEGORIES, SUPPORTED_LANGUAGES, MAX_FILE_SIZES
+from config import SUPPORTED_LANGUAGES, MAX_FILE_SIZES
+
+# Updated categories to match the image
+CATEGORIES = [
+    "Fables", "Events", "Music", "Places", "Food", "People",
+    "Literature", "Architecture", "Skills", "Images", "Culture", "Flora & Fauna"
+]
 
 # Page config
 st.set_page_config(
@@ -184,25 +192,94 @@ def show_home():
         """, unsafe_allow_html=True)
     
     st.markdown("---")
-    st.subheader("📂 Categories")
+    st.markdown("### 📂 Categories")
+    st.markdown("*Choose a category to contribute content*")
     
-    # Category grid
-    cols = st.columns(4)
-    category_icons = {
-        "Art": "🎨", "Meme": "😄", "Culture": "🏛️", "Food": "🍛",
-        "Fables": "📚", "Events": "🎉", "Music": "🎵", "People": "👥",
-        "Literature": "📖", "Architecture": "🏗️", "Skills": "🛠️", "Images": "🖼️",
-        "Videos": "🎬", "Flora": "🌿", "Fauna": "🦋", "Education": "🎓",
-        "Vegetation": "🌱", "Folk Talks": "🗣️", "Traditional Skills": "⚒️",
-        "Local History": "📜", "Local Locations": "📍", "Food & Agriculture": "🌾",
-        "Newspapers": "📰"
+    # Enhanced category data with descriptions matching the image
+    categories_data = [
+        {"name": "Fables", "icon": "📚", "desc": "Traditional stories with moral lessons and mythical characters"},
+        {"name": "Events", "icon": "🎉", "desc": "Happenings, celebrations, and special occasions"},
+        {"name": "Music", "icon": "🎵", "desc": "Musical content, songs, instruments, and audio experiences"},
+        {"name": "Places", "icon": "🏛️", "desc": "Locations, landmarks, and geographical content"},
+        {"name": "Food", "icon": "🍽️", "desc": "Culinary content, recipes, and food-related information"},
+        {"name": "People", "icon": "👥", "desc": "Individuals, personalities, and human-related content"},
+        {"name": "Literature", "icon": "📖", "desc": "Books, poems, writings, and literary works"},
+        {"name": "Architecture", "icon": "🏗️", "desc": "Buildings, structures, and architectural designs"},
+        {"name": "Skills", "icon": "⚡", "desc": "Abilities, talents, and learning materials"},
+        {"name": "Images", "icon": "🖼️", "desc": "Visual content, pictures, and artistic expressions"},
+        {"name": "Culture", "icon": "🎭", "desc": "Cultural traditions, customs, and practices"},
+        {"name": "Flora & Fauna", "icon": "🌿", "desc": "Plants, animals, and natural life"}
+    ]
+    
+    # Custom CSS for interactive cards matching the image design
+    st.markdown("""
+    <style>
+    .category-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+        margin: 20px 0;
     }
+    .category-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        padding: 25px 20px;
+        color: white;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: none;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        min-height: 160px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .category-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    }
+    .category-icon {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        display: block;
+    }
+    .category-title {
+        font-size: 1.3rem;
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: white;
+    }
+    .category-desc {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        line-height: 1.4;
+        color: rgba(255,255,255,0.9);
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
-    for i, category in enumerate(CATEGORIES):
+    # Create 4-column grid for categories
+    cols = st.columns(4)
+    
+    for i, cat_data in enumerate(categories_data):
         with cols[i % 4]:
-            icon = category_icons.get(category, "📁")
-            if st.button(f"{icon} {category}", key=f"cat_{i}", use_container_width=True):
-                st.session_state.selected_category = category
+            # Create the visual card
+            card_html = f"""
+            <div class="category-card">
+                <span class="category-icon">{cat_data['icon']}</span>
+                <div class="category-title">{cat_data['name']}</div>
+                <div class="category-desc">{cat_data['desc']}</div>
+            </div>
+            """
+            
+            # Display the card
+            st.markdown(card_html, unsafe_allow_html=True)
+            
+            # Create invisible button for functionality
+            if st.button(f"Select {cat_data['name']}", key=f"cat_{i}", use_container_width=True):
+                st.session_state.selected_category = cat_data['name']
                 st.session_state.current_page = "Contribute"
                 st.rerun()
 
@@ -223,11 +300,11 @@ def show_login():
                 if submit:
                     if email and password:
                         user = db.get_user_by_email(email)
-                        if user and verify_password(password, user['password_hash']):
+                        if user and bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
                             st.session_state.user_id = user['id']
                             st.session_state.user_email = user['email']
                             st.session_state.user_name = user['name']
-                            st.session_state.auth_token = create_jwt_token(user['id'], user['email'])
+                            # st.session_state.auth_token = user['id']
                             st.success("✅ Logged in successfully!")
                             st.rerun()
                         else:
@@ -251,13 +328,13 @@ def show_login():
                             st.error("❌ Password must be at least 8 characters!")
                         else:
                             user_id = hashlib.md5(f"{reg_email}{datetime.now()}".encode()).hexdigest()[:12]
-                            password_hash = hash_password(reg_password)
+                            password_hash = bcrypt.hashpw(reg_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                             
                             if db.create_user(user_id, reg_email, reg_name, password_hash):
                                 st.session_state.user_id = user_id
                                 st.session_state.user_email = reg_email
                                 st.session_state.user_name = reg_name
-                                st.session_state.auth_token = create_jwt_token(user_id, reg_email)
+                                # st.session_state.auth_token = user_id
                                 st.success("✅ Registered successfully!")
                                 st.rerun()
                             else:

@@ -1,0 +1,7 @@
+(function() {
+  window._POSTHOG_REMOTE_CONFIG = window._POSTHOG_REMOTE_CONFIG || {};
+  window._POSTHOG_REMOTE_CONFIG['phc_1EenA4y8XyMZm2fe7pYmlovFJ06lSJFiw3XccyJOnPe'] = {
+    config: {"token": "phc_1EenA4y8XyMZm2fe7pYmlovFJ06lSJFiw3XccyJOnPe", "supportedCompression": ["gzip", "gzip-js"], "hasFeatureFlags": false, "captureDeadClicks": false, "capturePerformance": {"network_timing": true, "web_vitals": true, "web_vitals_allowed_metrics": null}, "autocapture_opt_out": false, "autocaptureExceptions": true, "analytics": {"endpoint": "/i/v0/e/"}, "elementsChainAsString": true, "errorTracking": {"autocaptureExceptions": true, "suppressionRules": []}, "sessionRecording": false, "heatmaps": true, "surveys": false, "defaultIdentifiedOnly": true},
+    siteApps: []
+  }
+})();
